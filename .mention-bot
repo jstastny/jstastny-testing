@@ -1,7 +1,0 @@
-{
-  "delayed": true,
-  "delayedUntil": "10m",
-  "skipAlreadyAssignedPR": true,
-  "assignToReviewer": true
-}
-
