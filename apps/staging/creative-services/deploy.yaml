@@ -1,0 +1,160 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: creative-services
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: creative-services
+    env: staging
+  name: creative-services-web
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: http-server
+  selector:
+    app: creative-services
+    env: staging
+  type: NodePort
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: creative-services
+    env: staging
+  name: creative-services-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: creative-services
+      env: staging
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: creative-services
+        env: staging
+        tier: web
+    spec:
+      containers:
+      - command:
+        - bundle
+        - exec
+        - rails
+        - server
+        - "-p"
+        - '8080'
+        env:
+        - name: RAILS_LOG_TO_STDOUT
+          value: 'true'
+        envFrom:
+        - secretRef:
+            name: creative-services-secrets-bhcbk6hhk8
+        image: 322902370520.dkr.ecr.us-east-1.amazonaws.com/customink/creative-services:staging-v385
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: "/is_it_up"
+            port: http-server
+          initialDelaySeconds: 15
+        name: creative-services-web
+        ports:
+        - containerPort: 8080
+          name: http-server
+        readinessProbe:
+          httpGet:
+            path: "/is_it_up"
+            port: http-server
+          initialDelaySeconds: 15
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: creative-services
+    env: staging
+    tier: worker
+  name: creative-services-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: creative-services
+      env: staging
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: creative-services
+        env: staging
+        tier: worker
+    spec:
+      containers:
+      - command:
+        - bundle
+        - exec
+        - sidekiq
+        envFrom:
+        - secretRef:
+            name: creative-services-secrets-bhcbk6hhk8
+        image: 322902370520.dkr.ecr.us-east-1.amazonaws.com/customink/creative-services:staging-v385
+        imagePullPolicy: Always
+        name: creative-services-worker
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 256Mi
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig":
+      { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:322902370520:certificate/3f5c3fe2-71d8-40a0-a65b-d46ad348eceb
+    alb.ingress.kubernetes.io/healthcheck-path: "/is_it_up"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/security-groups: sg-68fc3d0f
+    alb.ingress.kubernetes.io/tags: env=staging,group=opstech,application=creative-services,target=internal
+    kubernetes.io/ingress.class: alb
+  labels:
+    env: staging
+  name: creative-services-web-ingress
+spec:
+  rules:
+  - host: creative-services.k8s-staging.customink.com
+    http:
+      paths:
+      - backend:
+          serviceName: ssl-redirect
+          servicePort: use-annotation
+        path: "/*"
+      - backend:
+          serviceName: creative-services-web
+          servicePort: 80
+        path: "/*"
