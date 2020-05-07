@@ -1,5 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: creative-services
-  when: 2020-01-19T00:05:09Z
